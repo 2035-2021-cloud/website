@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embroidery ERP Lite</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #fff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --brand: #2563eb;
+      --ok: #16a34a;
+      --danger: #dc2626;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: var(--brand);
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 1rem auto;
+      padding: 0 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    }
+    h2 { margin-top: 0; }
+    input, select, button, textarea {
+      width: 100%;
+      padding: 0.65rem;
+      margin: 0.25rem 0 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+    button {
+      background: var(--brand);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { opacity: 0.95; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.45rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .pill {
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 0.5rem;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    .present { color: var(--ok); font-weight: 600; }
+    .absent { color: var(--danger); font-weight: 600; }
+    .img-preview {
+      width: 70px;
+      height: 70px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f9fafb;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Embroidery ERP Lite</h1>
+    <div class="muted" style="color:#dbeafe">Simple app for design tracking + stitches + worker attendance</div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Add Design Entry</h2>
+      <label>Design Number</label>
+      <input id="designNumber" placeholder="e.g. D-102" />
+
+      <label>Stitches Count</label>
+      <input id="stitchesCount" type="number" placeholder="e.g. 15000" />
+
+      <label>Design Picture URL</label>
+      <input id="designPicture" placeholder="https://..." />
+
+      <label>Notes</label>
+      <textarea id="designNotes" rows="2" placeholder="Optional notes"></textarea>
+
+      <button id="addDesignBtn">Save Design</button>
+      <div class="muted">Data is saved in browser localStorage.</div>
+
+      <table id="designTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Stitches</th>
+            <th>Picture</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Worker Attendance (50 workers)</h2>
+      <label>Select Worker</label>
+      <select id="workerSelect"></select>
+
+      <label>Status</label>
+      <select id="attendanceStatus">
+        <option value="Present">Present</option>
+        <option value="Absent">Absent</option>
+      </select>
+
+      <button id="markAttendanceBtn">Mark Attendance</button>
+      <div class="stats">
+        <div class="pill">Total: <span id="totalWorkers">0</span></div>
+        <div class="pill">Present: <span id="presentCount">0</span></div>
+        <div class="pill">Absent: <span id="absentCount">0</span></div>
+      </div>
+
+      <table id="attendanceTable">
+        <thead>
+          <tr>
+            <th>Worker</th>
+            <th>Status</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const workers = Array.from({ length: 50 }, (_, i) => `Worker ${String(i + 1).padStart(2, "0")}`);
+
+    const designNumberEl = document.getElementById("designNumber");
+    const stitchesCountEl = document.getElementById("stitchesCount");
+    const designPictureEl = document.getElementById("designPicture");
+    const designNotesEl = document.getElementById("designNotes");
+    const designTableBody = document.querySelector("#designTable tbody");
+
+    const workerSelectEl = document.getElementById("workerSelect");
+    const attendanceStatusEl = document.getElementById("attendanceStatus");
+    const attendanceTableBody = document.querySelector("#attendanceTable tbody");
+    const totalWorkersEl = document.getElementById("totalWorkers");
+    const presentCountEl = document.getElementById("presentCount");
+    const absentCountEl = document.getElementById("absentCount");
+
+    const STORAGE_KEYS = {
+      designs: "embroidery_designs",
+      attendance: "embroidery_attendance"
+    };
+
+    function getDesigns() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.designs) || "[]");
+    }
+
+    function saveDesigns(designs) {
+      localStorage.setItem(STORAGE_KEYS.designs, JSON.stringify(designs));
+    }
+
+    function getAttendance() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.attendance) || "{}");
+    }
+
+    function saveAttendance(attendance) {
+      localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(attendance));
+    }
+
+    function renderDesigns() {
+      const designs = getDesigns();
+      designTableBody.innerHTML = "";
+
+      designs.forEach((design) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${design.number}</td>
+          <td>${Number(design.stitches).toLocaleString()}</td>
+          <td>${design.picture ? `<img class="img-preview" src="${design.picture}" alt="${design.number}" />` : "No image"}</td>
+          <td>${design.notes || "-"}</td>
+        `;
+        designTableBody.appendChild(row);
+      });
+    }
+
+    function renderWorkerDropdown() {
+      workers.forEach((worker) => {
+        const option = document.createElement("option");
+        option.value = worker;
+        option.textContent = worker;
+        workerSelectEl.appendChild(option);
+      });
+      totalWorkersEl.textContent = workers.length;
+    }
+
+    function renderAttendance() {
+      const attendance = getAttendance();
+      attendanceTableBody.innerHTML = "";
+
+      let present = 0;
+      workers.forEach((worker) => {
+        const entry = attendance[worker] || { status: "Not Marked", updatedAt: "-" };
+        if (entry.status === "Present") present++;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${worker}</td>
+          <td class="${entry.status === "Present" ? "present" : entry.status === "Absent" ? "absent" : ""}">${entry.status}</td>
+          <td>${entry.updatedAt}</td>
+        `;
+        attendanceTableBody.appendChild(row);
+      });
+
+      presentCountEl.textContent = present;
+      absentCountEl.textContent = workers.length - present;
+    }
+
+    document.getElementById("addDesignBtn").addEventListener("click", () => {
+      const number = designNumberEl.value.trim();
+      const stitches = stitchesCountEl.value.trim();
+      const picture = designPictureEl.value.trim();
+      const notes = designNotesEl.value.trim();
+
+      if (!number || !stitches) {
+        alert("Please enter design number and stitches count.");
+        return;
+      }
+
+      const designs = getDesigns();
+      designs.unshift({ number, stitches, picture, notes });
+      saveDesigns(designs);
+      renderDesigns();
+
+      designNumberEl.value = "";
+      stitchesCountEl.value = "";
+      designPictureEl.value = "";
+      designNotesEl.value = "";
+    });
+
+    document.getElementById("markAttendanceBtn").addEventListener("click", () => {
+      const worker = workerSelectEl.value;
+      const status = attendanceStatusEl.value;
+      const attendance = getAttendance();
+
+      attendance[worker] = {
+        status,
+        updatedAt: new Date().toLocaleString()
+      };
+
+      saveAttendance(attendance);
+      renderAttendance();
+    });
+
+    renderWorkerDropdown();
+    renderDesigns();
+    renderAttendance();
+  </script>
+</body>
+</html>
